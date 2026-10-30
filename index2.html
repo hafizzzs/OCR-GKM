@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verifikasi Struk Timbangan (OCR)</title>
+<!-- Konversi HEIC/HEIF (foto iPhone) ke JPEG di browser -->
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<style>
+  :root{
+    --bg:#F4F6F9; --card:#fff; --ink:#1B2430; --muted:#6B7685; --line:#E2E6EC;
+    --brand:#1F3A5F; --brand2:#2E5A8C;
+    --ok:#1E7B4A; --okbg:#E3F4EA; --bad:#B42318; --badbg:#FDE8E7;
+    --warn:#9A6200; --warnbg:#FFF4D6; --nf:#5B4B8A; --nfbg:#EEEAF8; --gray:#EEF1F4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:13px}
+  header{background:var(--brand);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{margin:0;font-size:17px;font-weight:600}
+  header .info{font-size:12px;opacity:.9;text-align:right;line-height:1.5}
+  main{padding:16px 20px;max-width:1700px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+  .drop{border:2px dashed #B8C3D1;border-radius:10px;padding:22px;text-align:center;cursor:pointer;transition:.15s;background:#FAFBFC}
+  .drop.over{border-color:var(--brand2);background:#EEF4FB}
+  .drop b{font-size:14px}
+  .drop small{display:block;color:var(--muted);margin-top:6px}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  button{border:0;border-radius:7px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;background:var(--gray);color:var(--ink)}
+  button.primary{background:var(--brand2);color:#fff}
+  button.green{background:var(--ok);color:#fff}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  label.chk{display:flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer}
+  select,input[type=text]{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px}
+  .progress{height:6px;background:var(--gray);border-radius:4px;overflow:hidden;flex:1;min-width:160px}
+  .progress div{height:100%;background:var(--brand2);width:0;transition:width .3s}
+  .stats{display:flex;gap:8px;flex-wrap:wrap}
+  .stat{padding:8px 12px;border-radius:8px;background:var(--gray);min-width:110px;cursor:pointer;border:2px solid transparent}
+  .stat.active{border-color:var(--brand2)}
+  .stat span{display:block;font-size:11px;color:var(--muted)}
+  .stat b{font-size:18px}
+  .stat.ok{background:var(--okbg)} .stat.bad{background:var(--badbg)} .stat.warn{background:var(--warnbg)} .stat.nf{background:var(--nfbg)}
+  .tablewrap{overflow:auto;max-height:62vh;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;min-width:1150px}
+  th{position:sticky;top:0;background:#EAF0F7;font-size:12px;text-align:left;padding:8px;border-bottom:1px solid var(--line);z-index:1}
+  td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:hover td{background:#FAFCFF}
+  .fname{font-weight:600;word-break:break-all;max-width:180px}
+  .cmp{border-radius:6px;padding:4px 6px;font-size:12px;line-height:1.45;white-space:nowrap}
+  .cmp small{color:var(--muted);display:inline-block;width:36px}
+  .cmp .d{font-weight:700}
+  .s-COCOK{background:var(--okbg)}
+  .s-TIDAK-COCOK{background:var(--badbg)}
+  .s-TIDAK-COCOK .d{color:var(--bad)}
+  .s-MIRIP,.s-TIDAK-TERBACA,.s-KOSONG-DI-SHEET{background:var(--warnbg)}
+  .badge{display:inline-block;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+  .b-VALID{background:var(--okbg);color:var(--ok)}
+  .b-TIDAK-VALID{background:var(--badbg);color:var(--bad)}
+  .b-PERLU-CEK{background:var(--warnbg);color:var(--warn)}
+  .b-TIDAK-DITEMUKAN,.b-NAMA-FILE-TIDAK-VALID{background:var(--nfbg);color:var(--nf)}
+  .b-ERROR{background:#3A0D0A;color:#fff}
+  .b-ANTRI{background:var(--gray);color:var(--muted)}
+  .b-PROSES{background:#E1ECF8;color:var(--brand2)}
+  .notes{font-size:11px;color:var(--muted);max-width:240px;white-space:normal}
+  .muted{color:var(--muted)}
+  .empty{padding:30px;text-align:center;color:var(--muted)}
+  .toast{position:fixed;right:18px;bottom:18px;background:var(--ink);color:#fff;padding:10px 14px;border-radius:8px;display:none;max-width:420px;z-index:50}
+  .toast a{color:#9CC7FF}
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(10,20,35,.55);display:none;align-items:center;justify-content:center;z-index:40}
+  .modal.show{display:flex}
+  .mbox{background:#fff;border-radius:12px;width:min(1200px,96vw);max-height:92vh;overflow:auto;padding:16px}
+  .mgrid{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
+  @media(max-width:800px){.mgrid{grid-template-columns:1fr}}
+  .mimg{width:100%;border:1px solid var(--line);border-radius:8px;background:#000;max-height:70vh;object-fit:contain}
+  .form{display:grid;grid-template-columns:150px 1fr;gap:8px 10px;align-items:center;margin:10px 0}
+  .form input{width:100%}
+  pre{background:#F6F8FA;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11px;max-height:230px;overflow:auto;white-space:pre-wrap}
+  .mhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+  .mhead h3{margin:0;font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔍 Verifikasi Struk Timbangan vs Rekap Pembongkaran</h1>
+  <div class="info" id="sheetInfo">Memuat info sheet…</div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="drop" id="drop">
+      <b>Tarik & lepas banyak foto struk atau satu folder di sini, atau klik untuk memilih</b>
+      <small>Format: JPG, JPEG, PNG, HEIC, HEIF, WEBP, BMP, GIF, PDF · Bisa banyak file sekaligus<br>
+      Nama file = No. Surat Jalan, pemisah boleh "_" atau "/" (contoh: <b>90_018137.jpg</b> atau <b>90/018137.jpg</b> → 90/018137)</small>
+      <input type="file" id="file" multiple accept="image/*,.heic,.heif,.HEIC,.HEIF,.pdf" hidden>
+      <input type="file" id="folder" webkitdirectory directory multiple hidden>
+    </div>
+    <div class="bar">
+      <button id="btnFiles">📄 Pilih Banyak File</button>
+      <button id="btnFolder">📁 Pilih Folder</button>
+      <button class="primary" id="btnRun">▶ Proses OCR & Verifikasi</button>
+      <button id="btnClear">Bersihkan</button>
+      <label class="chk"><input type="checkbox" id="optEnhance" checked> Pertajam gambar (grayscale + kontras)</label>
+      <div class="progress"><div id="prog"></div></div>
+      <span class="muted" id="progText">0 / 0</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="bar" style="margin:0 0 12px;justify-content:space-between">
+      <div class="stats" id="stats"></div>
+      <div class="bar" style="margin:0">
+        <label class="chk" title="Sel yang selisih diwarnai + diberi catatan, kolom STATUS OCR diisi"><input type="checkbox" id="optAuto" checked> <b>Tandai otomatis ke sheet</b></label>
+        <button id="btnMark">🖍 Tandai ke Sheet</button>
+        <button class="green" id="btnSave">💾 Simpan ke Log</button>
+      </div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Nama File</th><th>No. Surat Jalan</th><th>Baris</th>
+          <th>No Polisi<br><span class="muted">vs No Mobil</span></th>
+          <th>Gross<br><span class="muted">vs Berat Out</span></th>
+          <th>Tare<br><span class="muted">vs Berat In</span></th>
+          <th>Netto<br><span class="muted">vs Netto</span></th>
+          <th>Status</th><th>Catatan</th><th></th>
+        </tr></thead>
+        <tbody id="tbody"><tr><td colspan="11" class="empty">Belum ada file. Upload foto struk timbangan untuk mulai.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Modal detail -->
+<div class="modal" id="modal">
+  <div class="mbox">
+    <div class="mhead">
+      <h3 id="mTitle">Detail</h3>
+      <button id="mClose">✕ Tutup</button>
+    </div>
+    <div class="mgrid">
+      <div id="mImgWrap"></div>
+      <div>
+        <div id="mStatus"></div>
+        <div class="form">
+          <label>No. Surat Jalan</label><input type="text" id="fSJ">
+          <label>No Mobil (Struk)</label><input type="text" id="fPlat">
+          <label>Berat In / Tare</label><input type="text" id="fIn">
+          <label>Berat Out / Gross</label><input type="text" id="fOut">
+          <label>Netto</label><input type="text" id="fNet">
+        </div>
+        <div class="bar" style="margin:0 0 10px">
+          <button class="primary" id="btnRe">↻ Verifikasi Ulang (koreksi manual)</button>
+          <span class="muted" id="mSheet"></span>
+        </div>
+        <b>Teks hasil OCR</b>
+        <pre id="mRaw"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ======================= STATE & UTIL ======================= */
+const items = [];
+let seq = 0, running = false, filter = 'SEMUA', currentId = null;
+const CONCURRENCY = 3;   // jumlah gambar diproses paralel
+const STATUS_ORDER = ['VALID','TIDAK VALID','PERLU CEK','TIDAK DITEMUKAN','ERROR'];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => (n === null || n === undefined || n === '') ? '—' : (typeof n === 'number' ? n.toLocaleString('id-ID') : esc(n));
+const cls = s => String(s || '').replace(/\s+/g, '-');
+const toInt = v => { const d = String(v ?? '').replace(/\D/g, ''); return d ? parseInt(d, 10) : null; };
+
+function gs(fn, ...args) {
+  return new Promise((res, rej) =>
+    google.script.run.withSuccessHandler(res)
+      .withFailureHandler(e => rej(e && e.message ? e : new Error(String(e))))[fn](...args));
+}
+function toast(html, ms = 5000) {
+  const t = $('toast'); t.innerHTML = html; t.style.display = 'block';
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = 'none', ms);
+}
+function statusOf(it) {
+  if (it.status === 'SELESAI') return it.result.status === 'NAMA FILE TIDAK VALID' ? 'TIDAK DITEMUKAN' : it.result.status;
+  return it.status;
+}
+
+/* ======================= INIT ======================= */
+gs('getInfo').then(info => {
+  $('sheetInfo').innerHTML =
+    `<b>${esc(info.spreadsheet)}</b><br>Tab: ${esc(info.sheet)} · Header baris ${info.headerRow} · ` +
+    `${info.totalBaris.toLocaleString('id-ID')} baris data · Toleransi ${info.toleransi} kg`;
+}).catch(e => { $('sheetInfo').innerHTML = '⚠️ ' + esc(e.message); });
+
+/* ======================= UPLOAD ======================= */
+const drop = $('drop'), fileIn = $('file');
+drop.onclick = () => fileIn.click();
+fileIn.onchange = () => { addFiles(fileIn.files); fileIn.value = ''; };
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+$('btnFiles').onclick = () => fileIn.click();
+$('btnFolder').onclick = () => $('folder').click();
+$('folder').onchange = () => { addFiles($('folder').files); $('folder').value = ''; };
+
+// Drag & drop: mendukung banyak file sekaligus DAN folder (termasuk sub-folder)
+drop.addEventListener('drop', async e => {
+  const dt = e.dataTransfer;
+  const entries = dt.items ? Array.from(dt.items).map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean) : [];
+  if (!entries.length || !entries.some(en => en.isDirectory)) { addFiles(dt.files); return; }
+  toast('Membaca isi folder…');
+  const files = [];
+  async function walk(en) {
+    if (en.isFile) { files.push(await new Promise((res, rej) => en.file(res, rej))); return; }
+    const reader = en.createReader();
+    let batch;
+    do {
+      batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+      for (const child of batch) await walk(child);
+    } while (batch.length);
+  }
+  for (const en of entries) await walk(en);
+  addFiles(files);
+});
+
+const OK_EXT = ['jpg','jpeg','png','heic','heif','webp','bmp','gif','tif','tiff','jfif','pdf'];
+function addFiles(list) {
+  let added = 0, skip = 0;
+  for (const f of list) {
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (!OK_EXT.includes(ext) && !/^image\//.test(f.type)) { skip++; continue; }
+    if (items.some(i => i.name === f.name && i.file.size === f.size)) { skip++; continue; }
+    items.push({ id: ++seq, file: f, name: f.name, status: 'ANTRI' });
+    added++;
+  }
+  toast(`${added} file ditambahkan` + (skip ? `, ${skip} dilewati (bukan gambar / duplikat)` : '') +
+    `. Total antrian: ${items.length}. Klik ▶ Proses.`);
+  render();
+}
+
+/* ======================= PREPROCESS GAMBAR ======================= */
+function blobToBase64(blob) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+}
+async function decode(blob) {
+  if (window.createImageBitmap) return await createImageBitmap(blob, { imageOrientation: 'from-image' });
+  return await new Promise((res, rej) => {
+    const img = new Image(); const u = URL.createObjectURL(blob);
+    img.onload = () => { URL.revokeObjectURL(u); res(img); };
+    img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('decode')); };
+    img.src = u;
+  });
+}
+async function prepareImage(file, enhance) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'pdf' || file.type === 'application/pdf') {
+    if (file.size > 20 * 1024 * 1024) throw new Error('PDF terlalu besar (>20MB)');
+    return { base64: await blobToBase64(file), mime: 'application/pdf', previewUrl: null };
+  }
+  const isHeic = ['heic','heif'].includes(ext) || /hei[cf]/i.test(file.type);
+  let img;
+  try { img = await decode(file); }
+  catch (e) {
+    if (isHeic) {
+      if (!window.heic2any) throw new Error('Library HEIC gagal dimuat (cek koneksi internet)');
+      const conv = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.95 });
+      img = await decode(Array.isArray(conv) ? conv[0] : conv);
+    } else throw new Error('Format gambar tidak bisa dibaca browser');
+  }
+  const MAX = 2400;
+  const s = Math.min(1, MAX / Math.max(img.width, img.height));
+  const w = Math.round(img.width * s), h = Math.round(img.height * s);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+  if (img.close) img.close();
+  if (enhance) {
+    const d = ctx.getImageData(0, 0, w, h), p = d.data;
+    for (let i = 0; i < p.length; i += 4) {
+      let g = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+      g = (g - 128) * 1.3 + 128; g = g < 0 ? 0 : g > 255 ? 255 : g;
+      p[i] = p[i + 1] = p[i + 2] = g;
+    }
+    ctx.putImageData(d, 0, 0);
+  }
+  const out = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+  return { base64: await blobToBase64(out), mime: 'image/jpeg', previewUrl: URL.createObjectURL(out) };
+}
+
+/* ======================= PROSES ======================= */
+$('btnRun').onclick = async () => {
+  if (running) return;
+  const queue = items.filter(i => i.status === 'ANTRI' || i.status === 'ERROR');
+  if (!queue.length) { toast('Tidak ada file yang perlu diproses.'); return; }
+  running = true; setBusy(true);
+  const total = queue.length; let done = 0;
+  const tick = () => { $('prog').style.width = (done / total * 100) + '%'; $('progText').textContent = `${done} / ${total}`; };
+  tick();
+  const enhance = $('optEnhance').checked;
+  async function worker() {
+    while (queue.length) {
+      const it = queue.shift();
+      it.status = 'PROSES'; it.error = ''; render();
+      try {
+        const prep = await prepareImage(it.file, enhance);
+        if (prep.previewUrl) { if (it.previewUrl) URL.revokeObjectURL(it.previewUrl); it.previewUrl = prep.previewUrl; }
+        it.result = await gs('processImage', { fileName: it.name, base64: prep.base64, mimeType: prep.mime },
+                             { autoMark: $('optAuto').checked });
+        it.status = 'SELESAI'; it.saved = false;
+      } catch (e) {
+        it.status = 'ERROR'; it.error = e.message || String(e);
+      }
+      done++; tick(); render();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, worker));
+  running = false; setBusy(false);
+  toast(`Selesai memproses ${total} file.`);
+};
+
+$('btnClear').onclick = () => {
+  if (running) return;
+  if (items.some(i => i.result && !i.saved) && !confirm('Ada hasil yang belum disimpan ke log. Tetap bersihkan?')) return;
+  items.forEach(i => i.previewUrl && URL.revokeObjectURL(i.previewUrl));
+  items.length = 0; filter = 'SEMUA'; $('prog').style.width = '0'; $('progText').textContent = '0 / 0'; render();
+};
+
+$('btnSave').onclick = async () => {
+  const list = items.filter(i => i.status === 'SELESAI' && !i.saved);
+  if (!list.length) { toast('Tidak ada hasil baru untuk disimpan.'); return; }
+  setBusy(true);
+  try {
+    const r = await gs('saveResults', list.map(i => i.result));
+    list.forEach(i => i.saved = true);
+    toast(`✅ ${r.saved} hasil disimpan ke log. <a href="${esc(r.logUrl)}" target="_blank">Buka log</a>`, 8000);
+  } catch (e) { toast('⚠️ Gagal simpan: ' + esc(e.message), 8000); }
+  setBusy(false); render();
+};
+
+$('btnMark').onclick = async () => {
+  const list = items.filter(i => i.status === 'SELESAI' && i.result.sheet && !i.result.marked);
+  if (!list.length) { toast('Semua hasil sudah ditandai ke sheet.'); return; }
+  setBusy(true);
+  try {
+    const r = await gs('markResults', list.map(i => i.result));
+    list.forEach(i => i.result.marked = true);
+    toast(`🖍 ${r.marked} baris ditandai di sheet.`);
+  } catch (e) { toast('⚠️ Gagal menandai: ' + esc(e.message), 8000); }
+  setBusy(false); render();
+};
+
+function setBusy(b) { ['btnRun','btnClear','btnSave','btnMark'].forEach(id => $(id).disabled = b); }
+
+/* ======================= RENDER ======================= */
+function cmpCell(c) {
+  if (!c) return '<span class="muted">—</span>';
+  const d = (typeof c.selisih === 'number' && c.selisih !== 0)
+    ? `<div class="d">Δ ${c.selisih > 0 ? '+' : ''}${c.selisih.toLocaleString('id-ID')} kg</div>` : '';
+  const tag = c.status !== 'COCOK' ? `<div class="d">${esc(c.status)}</div>` : '';
+  return `<div class="cmp s-${cls(c.status)}"><div><small>Sheet</small>${fmt(c.sheet)}</div>` +
+         `<div><small>Struk</small>${fmt(c.ocr)}</div>${d || tag}</div>`;
+}
+function renderStats() {
+  const cnt = { SEMUA: items.length };
+  items.forEach(i => { const s = statusOf(i); cnt[s] = (cnt[s] || 0) + 1; });
+  const map = { 'SEMUA': '', 'VALID': 'ok', 'TIDAK VALID': 'bad', 'PERLU CEK': 'warn', 'TIDAK DITEMUKAN': 'nf', 'ERROR': 'bad' };
+  $('stats').innerHTML = Object.keys(map).map(k =>
+    `<div class="stat ${map[k]} ${filter === k ? 'active' : ''}" data-f="${k}"><span>${k === 'SEMUA' ? 'Total File' : k}</span><b>${cnt[k] || 0}</b></div>`
+  ).join('');
+  $('stats').querySelectorAll('.stat').forEach(el => el.onclick = () => { filter = el.dataset.f; render(); });
+}
+function render() {
+  renderStats();
+  const rows = items.filter(i => filter === 'SEMUA' || statusOf(i) === filter);
+  if (!rows.length) {
+    $('tbody').innerHTML = `<tr><td colspan="11" class="empty">${items.length ? 'Tidak ada data untuk filter ini.' : 'Belum ada file. Upload foto struk timbangan untuk mulai.'}</td></tr>`;
+    return;
+  }
+  $('tbody').innerHTML = rows.map((it, n) => {
+    const r = it.result, st = statusOf(it);
+    const sjFile = (it.name.replace(/%2F/gi, '/').replace(/\.[a-z0-9]{2,5}$/i, '')
+      .match(/(\d+)\s*[_\/\\:∕／⁄\-\s]+\s*(\d+)/) || []);
+    const sj = r ? r.noSuratJalan : (sjFile.length ? sjFile[1] + '/' + sjFile[2] : '—');
+    const notes = it.error ? esc(it.error) : r ? (r.catatan || []).map(esc).join('<br>') : '';
+    const extra = r && r.manual ? ' <span class="muted">(manual)</span>' : '';
+    const savedTag = (r && r.marked ? ' <span class="muted">🖍 sheet</span>' : '') +
+                     (it.saved ? ' <span class="muted">✓ log</span>' : '');
+    return `<tr>
+      <td>${n + 1}</td>
+      <td class="fname">${esc(it.name)}</td>
+      <td><b>${esc(sj || '—')}</b>${r && r.ocr.noUrut ? `<br><span class="muted">No Urut: ${esc(r.ocr.noUrut)}</span>` : ''}</td>
+      <td>${r && r.sheet ? r.sheet.row + `<br><span class="muted">No. ${esc(r.sheet.no)}</span>` : '—'}</td>
+      <td>${r ? cmpCell(r.cek.polisi) : ''}</td>
+      <td>${r ? cmpCell(r.cek.gross) : ''}</td>
+      <td>${r ? cmpCell(r.cek.tare) : ''}</td>
+      <td>${r ? cmpCell(r.cek.netto) : ''}</td>
+      <td><span class="badge b-${cls(st)}">${esc(r && st === 'TIDAK DITEMUKAN' ? r.status : st)}</span>${extra}${savedTag}</td>
+      <td class="notes">${notes}</td>
+      <td>${r ? `<button data-id="${it.id}" class="det">Detail</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+  $('tbody').querySelectorAll('.det').forEach(b => b.onclick = () => openDetail(+b.dataset.id));
+}
+
+/* ======================= DETAIL & KOREKSI ======================= */
+function openDetail(id) {
+  const it = items.find(i => i.id === id); if (!it || !it.result) return;
+  currentId = id;
+  const r = it.result;
+  $('mTitle').textContent = it.name;
+  $('mImgWrap').innerHTML = it.previewUrl ? `<img class="mimg" src="${it.previewUrl}">` : '<div class="empty">Pratinjau tidak tersedia (PDF)</div>';
+  $('mStatus').innerHTML = `<span class="badge b-${cls(statusOf(it))}">${esc(r.status)}</span> ` +
+    `<span class="muted">Metode baca: ${esc(r.ocr.metode || '-')}</span>` +
+    (r.catatan && r.catatan.length ? `<div class="notes" style="max-width:none;margin-top:6px">${r.catatan.map(esc).join('<br>')}</div>` : '');
+  $('fSJ').value = r.noSuratJalan || '';
+  $('fPlat').value = r.ocr.noMobil || '';
+  $('fIn').value = r.ocr.beratIn ?? '';
+  $('fOut').value = r.ocr.beratOut ?? '';
+  $('fNet').value = r.ocr.netto ?? '';
+  $('mSheet').textContent = r.sheet
+    ? `Sheet baris ${r.sheet.row}: ${r.sheet.polisi} · G ${fmt(r.sheet.gross)} · T ${fmt(r.sheet.tare)} · N ${fmt(r.sheet.netto)}${r.sheet.driver ? ' · ' + r.sheet.driver : ''}`
+    : '';
+  $('mRaw').textContent = r.ocr.rawText || '(kosong)';
+  $('modal').classList.add('show');
+}
+$('mClose').onclick = () => $('modal').classList.remove('show');
+$('modal').onclick = e => { if (e.target.id === 'modal') $('modal').classList.remove('show'); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').classList.remove('show'); });
+
+$('btnRe').onclick = async () => {
+  const it = items.find(i => i.id === currentId); if (!it) return;
+  const old = it.result;
+  const rec = {
+    fileName: it.name,
+    noSuratJalan: $('fSJ').value.trim(),
+    noMobil: $('fPlat').value.trim(),
+    beratIn: toInt($('fIn').value),
+    beratOut: toInt($('fOut').value),
+    netto: toInt($('fNet').value),
+    noUrut: old.ocr.noUrut
+  };
+  $('btnRe').disabled = true;
+  try {
+    const res = await gs('reverify', rec, { autoMark: $('optAuto').checked });
+    res.ocr.rawText = old.ocr.rawText;
+    it.result = res; it.saved = false;
+    render(); openDetail(it.id);
+    toast('Verifikasi ulang selesai.');
+  } catch (e) { toast('⚠️ ' + esc(e.message)); }
+  $('btnRe').disabled = false;
+};
+
+render();
+</script>
+</body>
+</html>
